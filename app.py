@@ -2,20 +2,14 @@
 import gc
 import math
 import pickle  # Importar pickle para cargar objetos guardados
-import pkg_resources
 import numpy as np  # Importar numpy para manejo de arrays
 import pandas as pd  # Importar pandas para manipulación de datos
 import tensorflow as tf  # Importar TensorFlow para manejar modelos de deep learning
+import os
 from flask import Flask, request, jsonify, render_template
 from tensorflow.keras.layers import LeakyReLU
 
-
 app = Flask(__name__)  # Crear una instancia de la aplicación Flask
-
-# Listar todas las librerías y sus versiones
-installed_packages = pkg_resources.working_set
-for package in sorted(installed_packages, key=lambda x: x.project_name.lower()):
-    print(f"{package.project_name}=={package.version}")
 
 # Cargar el modelo y el scaler
 discriminator = tf.saved_model.load('gan_models/discriminator_fold4')
@@ -33,6 +27,7 @@ FEATURES = [
     'Transaccion_TRANSFER INTERNACIONAL', 'Transaccion_TRANSFER INTERNAS'
 ]
 
+
 @app.route('/')  # Ruta principal que renderiza la página principal
 def index():
     # Cargar los datos normales y obtener la lista de clientes únicos
@@ -40,9 +35,9 @@ def index():
     top_clients = data['Cod_Cliente'].unique().tolist()
     # Renderizar la plantilla HTML con los clientes
     return render_template('index.html', top_clients=top_clients)
-
-
 # Ruta para manejar predicciones de transacciones individuales
+
+
 @app.route('/predict', methods=['POST'])
 def predict():
     data = request.json  # Obtener los datos enviados desde el frontend
@@ -82,8 +77,7 @@ def predict():
     client_labels = np.array([int(data['Cod_Cliente'])])
     max_clients = 3685  # Ajustar al número máximo de clientes esperados por el modelo
     client_labels = np.clip(client_labels, 0, max_clients - 1)
-    client_one_hot = tf.keras.utils.to_categorical(
-        client_labels, num_classes=max_clients)
+    client_one_hot = tf.keras.utils.to_categorical(client_labels, num_classes=max_clients)
 
     # Realizar la predicción con el modelo de discriminador
     try:
@@ -119,14 +113,11 @@ def predict():
             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
         ]
 
-        dia_semana_frecuente = dia_semana_map[
-            int(stats['Dia_Semana_Mas_Frecuente'])
-        ]
+        dia_semana_frecuente = dia_semana_map[int(stats['Dia_Semana_Mas_Frecuente'])]
         mes_frecuente = mes_map[int(stats['Mes_Mas_Frecuente']) - 1]
 
         # Evaluar si la transacción es inusual en valor, hora, día o mes de la transacción
-        valor_anomalo = float(data['Valor']) > (
-                stats['Media_Valor'] + 2 * stats['Std_Valor'])
+        valor_anomalo = float(data['Valor']) > (stats['Media_Valor'] + 2 * stats['Std_Valor'])
         hora_inusual = abs(seconds - hora_frecuente) > 6 * 3600  # Diferencia mayor a 6 horas
         tipo_transaccion_columna = f"Num_{data['Transaccion'].replace(' ', '_')}"
         tipo_transaccion_nuevo = stats.get(tipo_transaccion_columna, 0) == 0
@@ -160,41 +151,45 @@ def predict():
         )
 
         explanation = (
-            f"<strong>Cliente {data['Cod_Cliente']}</strong> "
-            f"realizó una transacción de <strong>{float(data['Valor']):.2f} USD</strong>, "
-            f'clasificada como {"<span style=\"color: red;\">Anómala</span>" if outlier else "<span style=\"color: green;\">Normal</span>"}.<br>'
-            f"<ul>"
-            f"<li>Valor máximo de transacción previo: <strong>{float(stats['Max_Valor']):.2f} USD</strong></li>"
-            f"<li>Valor mediano de transacción: <strong>{float(stats['Mediana_Valor']):.2f} USD</strong></li>"
-            f"<li>Valor promedio de transacción: <strong>{float(stats['Media_Valor']):.2f} USD</strong></li>"
-            f"<li>Desviación estándar del valor: <strong>{float(stats['Std_Valor']):.2f} USD</strong></li>"
-            f"<li>Número total de transacciones: <strong>{int(stats['Num_Transacciones'])}</strong></li>"
-            f"<li>Hora más frecuente de transacción: <strong>{hora_hhmmss}</strong></li>"
-            f"<li>Día más frecuente de transacción: <strong>{dia_semana_frecuente}</strong></li>"
-            f"<li>Mes más frecuente de transacción: <strong>{mes_frecuente}</strong></li>"
-            f"<li><strong>Nueva transacción comparada con historial:</strong></li>"
-            f"{diferencias_str}"
-            f"<li>Número de transacciones de PAGO TARJETA DE CREDITO: <strong>{int(stats.get('Num_PAGO_TARJETA_CREDITO', 0))}</strong></li>"
-            f"<li>Número de transacciones de REMESAS: <strong>{int(stats.get('Num_REMESAS', 0))}</strong></li>"
-            f"<li>Número de transacciones de TRANSFER BANCOS: <strong>{int(stats.get('Num_TRANSFER_BANCOS', 0))}</strong></li>"
-            f"<li>Número de transacciones de TRANSFER EXTERNAS: <strong>{int(stats.get('Num_TRANSFER_EXTERNAS', 0))}</strong></li>"
-            f"<li>Número de transacciones de TRANSFER INTERNACIONAL: <strong>{int(stats.get('Num_TRANSFER_INTERNACIONAL', 0))}</strong></li>"
-            f"<li>Número de transacciones de TRANSFER INTERNAS: <strong>{int(stats.get('Num_TRANSFER_INTERNAS', 0))}</strong></li>"
-            f"</ul>"
-            f"<br><strong>¿Qué significa esta probabilidad?</strong><br>"
-            f"La probabilidad calculada es {probability:.2f}. "
-            "Este valor representa la confianza que tiene el modelo en que la transacción es normal. "
-            f"Si la probabilidad es menor que {threshold:.2f}, se considera que la transacción es anómala. "
-            f"En este caso, como la probabilidad es {'menor' if outlier else 'mayor'} que el umbral, "
-            f"la transacción ha sido clasificada como {'anómala' if outlier else 'normal'}."
+                f"<strong>Cliente {data['Cod_Cliente']}</strong> "
+                f"realizó una transacción de <strong>{float(data['Valor']):.2f} USD</strong>, "
+                "clasificada como " +
+                ("<span style='color: red;'>Anómala</span>" if outlier else "<span style='color: green;'>Normal</span>") +
+                ".<br>" +
+                "<ul>"
+                f"<li>Valor máximo de transacción previo: <strong>{float(stats['Max_Valor']):.2f} USD</strong></li>"
+                f"<li>Valor mediano de transacción: <strong>{float(stats['Mediana_Valor']):.2f} USD</strong></li>"
+                f"<li>Valor promedio de transacción: <strong>{float(stats['Media_Valor']):.2f} USD</strong></li>"
+                f"<li>Desviación estándar del valor: <strong>{float(stats['Std_Valor']):.2f} USD</strong></li>"
+                f"<li>Número total de transacciones: <strong>{int(stats['Num_Transacciones'])}</strong></li>"
+                f"<li>Hora más frecuente de transacción: <strong>{hora_hhmmss}</strong></li>"
+                f"<li>Día más frecuente de transacción: <strong>{dia_semana_frecuente}</strong></li>"
+                f"<li>Mes más frecuente de transacción: <strong>{mes_frecuente}</strong></li>"
+                "<li><strong>Nueva transacción comparada con historial:</strong></li>"
+                f"{diferencias_str}"
+                f"<li>Número de transacciones de PAGO TARJETA DE CREDITO: <strong>{int(stats.get('Num_PAGO_TARJETA_CREDITO', 0))}</strong></li>"
+                f"<li>Número de transacciones de REMESAS: <strong>{int(stats.get('Num_REMESAS', 0))}</strong></li>"
+                f"<li>Número de transacciones de TRANSFER BANCOS: <strong>{int(stats.get('Num_TRANSFER_BANCOS', 0))}</strong></li>"
+                f"<li>Número de transacciones de TRANSFER EXTERNAS: <strong>{int(stats.get('Num_TRANSFER_EXTERNAS', 0))}</strong></li>"
+                f"<li>Número de transacciones de TRANSFER INTERNACIONAL: <strong>{int(stats.get('Num_TRANSFER_INTERNACIONAL', 0))}</strong></li>"
+                f"<li>Número de transacciones de TRANSFER INTERNAS: <strong>{int(stats.get('Num_TRANSFER_INTERNAS', 0))}</strong></li>"
+                "</ul>"
+                "<br><strong>¿Qué significa esta probabilidad?</strong><br>"
+                f"La probabilidad calculada es {probability:.2f}. "
+                "Este valor representa la confianza que tiene el modelo en que la transacción es normal. "
+                f"Si la probabilidad es menor que {threshold:.2f}, se considera que la transacción es anómala. "
+                "En este caso, como la probabilidad es " +
+                ("menor" if outlier else "mayor") +
+                f" que el umbral, la transacción ha sido clasificada como {'anómala' if outlier else 'normal'}."
         )
     else:
         # En caso de que no haya estadísticas para el cliente
         explanation = (
-            f"<strong>Cliente {data['Cod_Cliente']}</strong> "
-            f"realizó una transacción de <strong>{float(data['Valor']):.2f} USD</strong>, "
-            f"clasificada como {'<span style=\"color: red;\">Anómala</span>' if outlier else '<span style=\"color: green;\">Normal</span>'}.<br>"
-            f"No se encontraron estadísticas históricas para este cliente."
+                f"<strong>Cliente {data['Cod_Cliente']}</strong> "
+                f"realizó una transacción de <strong>{float(data['Valor']):.2f} USD</strong>, "
+                "clasificada como " +
+                ("<span style='color: red;'>Anómala</span>" if outlier else "<span style='color: green;'>Normal</span>") +
+                ".<br>No se encontraron estadísticas históricas para este cliente."
         )
 
     return jsonify({
@@ -202,7 +197,6 @@ def predict():
                    f"Probabilidad: {probability:.2f}. {explanation}",
         'confirm_needed': outlier
     })
-
 
 # Ruta para manejar la carga de archivos CSV
 @app.route('/cargar_csv', methods=['POST'])
@@ -286,9 +280,7 @@ def cargar_csv():
     total_anomalos = len(data)
     anomalos_clasificadas_anomalas = len(data[data['Outlier'] == True])
     anomalos_clasificadas_normales = len(data[data['Outlier'] == False])
-    porcentaje_anomalos = (
-                                  anomalos_clasificadas_anomalas / total_anomalos
-                          ) * 100
+    porcentaje_anomalos = (anomalos_clasificadas_anomalas / total_anomalos) * 100
 
     worst_anomalies = data[data['Outlier'] == True].nsmallest(5, 'Probability')
 
@@ -323,7 +315,6 @@ def cargar_csv():
     gc.collect()
 
     return jsonify(response)  # Devolver la respuesta como JSON
-
 
 @app.route('/update_model', methods=['POST'])
 def update_model():
@@ -360,8 +351,7 @@ def update_model():
     # Asegurarse de que el código del cliente no supere el valor máximo permitido
     max_clients = client_stats['Cod_Cliente'].max() + 1
     if client_id >= max_clients:
-        return jsonify(
-            {'error': f'El código de cliente {client_id} supera el máximo permitido de {max_clients}.'}), 400
+        return jsonify({'error': f'El código de cliente {client_id} supera el máximo permitido de {max_clients}.'}), 400
 
     # Verificar si el cliente existe en las estadísticas
     client_stats_row = client_stats[client_stats['Cod_Cliente'] == client_id]
@@ -372,18 +362,15 @@ def update_model():
 
     # Actualizar los valores de estadísticas (media, desviación estándar, etc.)
     num_transacciones = client_stats_row['Num_Transacciones'] + 1
-    media_valor_actualizada = (
-                                      (client_stats_row['Media_Valor'] * client_stats_row['Num_Transacciones']) + data_preprocessed['Valor']) / num_transacciones
-    varianza_actualizada = (
-            ((client_stats_row['Std_Valor'] ** 2) * client_stats_row['Num_Transacciones'] +
-             (data_preprocessed['Valor'] - media_valor_actualizada) ** 2) / num_transacciones)
+    media_valor_actualizada = ((client_stats_row['Media_Valor'] * client_stats_row['Num_Transacciones']) + data_preprocessed['Valor']) / num_transacciones
+    varianza_actualizada = (((client_stats_row['Std_Valor'] ** 2) * client_stats_row['Num_Transacciones']) +
+                            (data_preprocessed['Valor'] - media_valor_actualizada) ** 2) / num_transacciones
     std_valor_actualizada = np.sqrt(varianza_actualizada)
 
     client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Num_Transacciones'] = num_transacciones
     client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Media_Valor'] = media_valor_actualizada
     client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Std_Valor'] = std_valor_actualizada
-    client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Max_Valor'] = max(
-        client_stats_row['Max_Valor'], data_preprocessed['Valor'])
+    client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Max_Valor'] = max(client_stats_row['Max_Valor'], data_preprocessed['Valor'])
 
     # Actualizar el archivo CSV con las nuevas estadísticas del cliente
     client_stats.to_csv('client_stats_actualizado.csv', index=False)
@@ -396,10 +383,7 @@ def update_model():
 
     # Reentrenamiento del discriminador
     try:
-        discriminator.train_on_batch(
-            [data_scaled.astype(np.float32), client_one_hot.astype(np.float32)],
-            np.array([1.0])
-        )
+        discriminator.train_on_batch([data_scaled.astype(np.float32), client_one_hot.astype(np.float32)], np.array([1.0]))
     except Exception as e:
         return jsonify({'error': f'Error durante el reentrenamiento: {str(e)}'}), 500
 
@@ -407,6 +391,4 @@ def update_model():
 
 
 if __name__ == '__main__':
-    import os
-    port = int(os.environ.get("PORT", 5000))  # Obtiene el puerto de la variable de entorno o usa 5000 por defecto
-    app.run(debug=True, host="0.0.0.0", port=port)  # Inicia la aplicación en el puerto especificado
+    app.run(debug=True, host="0.0.0.0", port=os.getenv("PORT", default=5000))
