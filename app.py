@@ -407,4 +407,6 @@ def update_model():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)  # Iniciar la aplicación Flask en modo de depuración
+    import os
+    port = int(os.environ.get("PORT", 5000))  # Obtiene el puerto de la variable de entorno o usa 5000 por defecto
+    app.run(debug=True, host="0.0.0.0", port=port)  # Inicia la aplicación en el puerto especificado
