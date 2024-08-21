@@ -20,7 +20,7 @@ for package in sorted(installed_packages, key=lambda x: x.project_name.lower()):
 
 
 # Cargar el modelo y el scaler
-discriminator = tf.saved_model.load('gan_models/discriminator_fold10')
+discriminator = tf.saved_model.load('gan_models/discriminator_fold4')
 with open('gan_models/scaler_gan.pkl', 'rb') as f:
     scaler_gan = pickle.load(f)
 
@@ -89,7 +89,7 @@ def predict():
         return jsonify({'error': str(e)}), 500
 
     # Definir el umbral para determinar si la transacción es anómala
-    threshold = 0.4081540815408154
+    threshold = 0.4191541915419154
     outlier = bool(probability < threshold)  # Convertir a booleano de Python
 
     # Obtener las estadísticas del cliente actual
@@ -255,7 +255,7 @@ def cargar_csv():
     data['Probability'] = probabilities
 
     # Determinar si las transacciones son anómalas o no basado en el umbral
-    threshold = 0.4081540815408154
+    threshold = 0.67
     data['Outlier'] = data['Probability'] < threshold
 
     # Convertir las horas seno y coseno a formato HH:MM:SS
