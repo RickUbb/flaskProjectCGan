@@ -1,23 +1,21 @@
 # Importar el recolector de basura para liberar memoria cuando sea necesario
-import pkg_resources
-from keras.layers import TFSMLayer
-from tensorflow.keras.layers import LeakyReLU
 import gc
-# Importar Flask y métodos para manejar solicitudes HTTP
-from flask import Flask, request, jsonify, render_template
-import pandas as pd  # Importar pandas para manipulación de datos
-import numpy as np  # Importar numpy para manejo de arrays
+import math
 import pickle  # Importar pickle para cargar objetos guardados
+import pkg_resources
+import numpy as np  # Importar numpy para manejo de arrays
+import pandas as pd  # Importar pandas para manipulación de datos
 import tensorflow as tf  # Importar TensorFlow para manejar modelos de deep learning
+from flask import Flask, request, jsonify, render_template
+from tensorflow.keras.layers import LeakyReLU
+
 
 app = Flask(__name__)  # Crear una instancia de la aplicación Flask
-
 
 # Listar todas las librerías y sus versiones
 installed_packages = pkg_resources.working_set
 for package in sorted(installed_packages, key=lambda x: x.project_name.lower()):
     print(f"{package.project_name}=={package.version}")
-
 
 # Cargar el modelo y el scaler
 discriminator = tf.saved_model.load('gan_models/discriminator_fold4')
@@ -28,11 +26,12 @@ with open('gan_models/scaler_gan.pkl', 'rb') as f:
 client_stats = pd.read_csv('client_stats_actualizado.csv')
 
 # Definir las características que el modelo utiliza
-FEATURES = ['Valor', 'Dia_Semana', 'Mes', 'Dia_Mes', 'Hora_seno', 'Hora_coseno',
-            'Transaccion_PAGO TARJETA DE CREDITO', 'Transaccion_REMESAS',
-            'Transaccion_TRANSFER BANCOS', 'Transaccion_TRANSFER EXTERNAS',
-            'Transaccion_TRANSFER INTERNACIONAL', 'Transaccion_TRANSFER INTERNAS']
-
+FEATURES = [
+    'Valor', 'Dia_Semana', 'Mes', 'Dia_Mes', 'Hora_seno', 'Hora_coseno',
+    'Transaccion_PAGO TARJETA DE CREDITO', 'Transaccion_REMESAS',
+    'Transaccion_TRANSFER BANCOS', 'Transaccion_TRANSFER EXTERNAS',
+    'Transaccion_TRANSFER INTERNACIONAL', 'Transaccion_TRANSFER INTERNAS'
+]
 
 @app.route('/')  # Ruta principal que renderiza la página principal
 def index():
@@ -61,12 +60,18 @@ def predict():
         'Dia_Mes': data['Dia_Mes'],
         'Hora_seno': np.sin(2 * np.pi * seconds / 86400),
         'Hora_coseno': np.cos(2 * np.pi * seconds / 86400),
-        'Transaccion_PAGO TARJETA DE CREDITO': 1 if data['Transaccion'] == 'PAGO TARJETA DE CREDITO' else 0,
-        'Transaccion_REMESAS': 1 if data['Transaccion'] == 'REMESAS' else 0,
-        'Transaccion_TRANSFER BANCOS': 1 if data['Transaccion'] == 'TRANSFER BANCOS' else 0,
-        'Transaccion_TRANSFER EXTERNAS': 1 if data['Transaccion'] == 'TRANSFER EXTERNAS' else 0,
-        'Transaccion_TRANSFER INTERNACIONAL': 1 if data['Transaccion'] == 'TRANSFER INTERNACIONAL' else 0,
-        'Transaccion_TRANSFER INTERNAS': 1 if data['Transaccion'] == 'TRANSFER INTERNAS' else 0
+        'Transaccion_PAGO TARJETA DE CREDITO': (
+            1 if data['Transaccion'] == 'PAGO TARJETA DE CREDITO' else 0),
+        'Transaccion_REMESAS': (
+            1 if data['Transaccion'] == 'REMESAS' else 0),
+        'Transaccion_TRANSFER BANCOS': (
+            1 if data['Transaccion'] == 'TRANSFER BANCOS' else 0),
+        'Transaccion_TRANSFER EXTERNAS': (
+            1 if data['Transaccion'] == 'TRANSFER EXTERNAS' else 0),
+        'Transaccion_TRANSFER INTERNACIONAL': (
+            1 if data['Transaccion'] == 'TRANSFER INTERNACIONAL' else 0),
+        'Transaccion_TRANSFER INTERNAS': (
+            1 if data['Transaccion'] == 'TRANSFER INTERNAS' else 0)
     }
 
     # Convertir los datos en un DataFrame y escalar las características
@@ -82,8 +87,9 @@ def predict():
 
     # Realizar la predicción con el modelo de discriminador
     try:
-        probability = discriminator([data_scaled.astype(np.float32), client_one_hot.astype(
-            np.float32)], training=False).numpy().flatten()[0]
+        probability = discriminator(
+            [data_scaled.astype(np.float32), client_one_hot.astype(np.float32)],
+            training=False).numpy().flatten()[0]
     except Exception as e:
         # Manejar errores durante la inferencia
         return jsonify({'error': str(e)}), 500
@@ -93,34 +99,38 @@ def predict():
     outlier = bool(probability < threshold)  # Convertir a booleano de Python
 
     # Obtener las estadísticas del cliente actual
-    stats = client_stats[client_stats['Cod_Cliente']
-                         == int(data['Cod_Cliente'])]
+    stats = client_stats[client_stats['Cod_Cliente'] == int(data['Cod_Cliente'])]
     if not stats.empty:
         stats = stats.iloc[0]
         hora_frecuente = int(stats['Hora_Mas_Frecuente'])
-        hora_hhmmss = f"{hora_frecuente // 3600:02d}:{
-        (hora_frecuente % 3600) // 60:02d}:{hora_frecuente % 60:02d}"
+        hora_hhmmss = (
+            f"{hora_frecuente // 3600:02d}:"
+            f"{(hora_frecuente % 3600) // 60:02d}:"
+            f"{hora_frecuente % 60:02d}"
+        )
 
         # Convertir el día y mes más frecuentes a su representación en letras
-        dia_semana_map = ['Domingo', 'Lunes', 'Martes',
-                          'Miércoles', 'Jueves', 'Viernes', 'Sábado']
-        mes_map = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-                   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        dia_semana_map = [
+            'Domingo', 'Lunes', 'Martes',
+            'Miércoles', 'Jueves', 'Viernes', 'Sábado'
+        ]
+        mes_map = [
+            'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+        ]
 
-        dia_semana_frecuente = dia_semana_map[int(
-            stats['Dia_Semana_Mas_Frecuente'])]
+        dia_semana_frecuente = dia_semana_map[
+            int(stats['Dia_Semana_Mas_Frecuente'])
+        ]
         mes_frecuente = mes_map[int(stats['Mes_Mas_Frecuente']) - 1]
 
         # Evaluar si la transacción es inusual en valor, hora, día o mes de la transacción
         valor_anomalo = float(data['Valor']) > (
                 stats['Media_Valor'] + 2 * stats['Std_Valor'])
-        hora_inusual = abs(seconds - hora_frecuente) > 6 * \
-                       3600  # Diferencia mayor a 6 horas
-        tipo_transaccion_columna = f"Num_{
-        data['Transaccion'].replace(' ', '_')}"
+        hora_inusual = abs(seconds - hora_frecuente) > 6 * 3600  # Diferencia mayor a 6 horas
+        tipo_transaccion_columna = f"Num_{data['Transaccion'].replace(' ', '_')}"
         tipo_transaccion_nuevo = stats.get(tipo_transaccion_columna, 0) == 0
-        dia_inusual = int(data['Dia_Semana']) != int(
-            stats['Dia_Semana_Mas_Frecuente'])
+        dia_inusual = int(data['Dia_Semana']) != int(stats['Dia_Semana_Mas_Frecuente'])
         mes_inusual = int(data['Mes']) != int(stats['Mes_Mas_Frecuente'])
 
         # Crear una lista de diferencias encontradas
@@ -132,76 +142,64 @@ def predict():
             diferencias.append(
                 "La hora de esta transacción es inusual comparada con las horas frecuentes anteriores.")
         if tipo_transaccion_nuevo:
-            diferencias.append(f"Este tipo de transacción ({
-            data['Transaccion']}) no es común para este cliente.")
+            diferencias.append(
+                f"Este tipo de transacción ({data['Transaccion']}) no es común para este cliente.")
         if dia_inusual:
-            diferencias.append(f"Esta transacción se realiza en un día ({dia_semana_map[int(
-                data['Dia_Semana'])]}) que no es el más frecuente para este cliente.")
+            diferencias.append(
+                f"Esta transacción se realiza en un día ({dia_semana_map[int(data['Dia_Semana'])]}) "
+                "que no es el más frecuente para este cliente.")
         if mes_inusual:
-            diferencias.append(f"Esta transacción se realiza en un mes ({
-            mes_map[int(data['Mes']) - 1]}) que no es el más frecuente para este cliente.")
+            diferencias.append(
+                f"Esta transacción se realiza en un mes ({mes_map[int(data['Mes']) - 1]}) "
+                "que no es el más frecuente para este cliente.")
 
         # Generar una explicación detallada para el resultado
-        diferencias_str = " ".join(
-            [f"⚠️ {d}" for d in diferencias]) if diferencias else "Esta transacción es atípica en comparación con el comportamiento anterior del cliente."
+        diferencias_str = (
+            " ".join([f"⚠️ {d}" for d in diferencias])
+            if diferencias else "Esta transacción es atípica en comparación con el comportamiento anterior del cliente."
+        )
 
         explanation = (
-            f"<strong>Cliente {data['Cod_Cliente']}</strong> realizó una transacción de <strong>{
-            float(data['Valor']):.2f} USD</strong>, "
-            f"clasificada como {
-            '<span style=\"color: red;\">Anómala</span>' if outlier else '<span style=\"color: green;\">Normal</span>'}.<br>"
+            f"<strong>Cliente {data['Cod_Cliente']}</strong> "
+            f"realizó una transacción de <strong>{float(data['Valor']):.2f} USD</strong>, "
+            f"clasificada como {'<span style=\"color: red;\">Anómala</span>' if outlier else '<span style=\"color: green;\">Normal</span>'}.<br>"
             f"<ul>"
-            f"<li>Valor máximo de transacción previo: <strong>{
-            float(stats['Max_Valor']):.2f} USD</strong></li>"
-            f"<li>Valor mediano de transacción: <strong>{
-            float(stats['Mediana_Valor']):.2f} USD</strong></li>"
-            f"<li>Valor promedio de transacción: <strong>{
-            float(stats['Media_Valor']):.2f} USD</strong></li>"
-            f"<li>Desviación estándar del valor: <strong>{
-            float(stats['Std_Valor']):.2f} USD</strong></li>"
-            f"<li>Número total de transacciones: <strong>{
-            int(stats['Num_Transacciones'])}</strong></li>"
-            f"<li>Hora más frecuente de transacción: <strong>{
-            hora_hhmmss}</strong></li>"
-            f"<li>Día más frecuente de transacción: <strong>{
-            dia_semana_frecuente}</strong></li>"
-            f"<li>Mes más frecuente de transacción: <strong>{
-            mes_frecuente}</strong></li>"
+            f"<li>Valor máximo de transacción previo: <strong>{float(stats['Max_Valor']):.2f} USD</strong></li>"
+            f"<li>Valor mediano de transacción: <strong>{float(stats['Mediana_Valor']):.2f} USD</strong></li>"
+            f"<li>Valor promedio de transacción: <strong>{float(stats['Media_Valor']):.2f} USD</strong></li>"
+            f"<li>Desviación estándar del valor: <strong>{float(stats['Std_Valor']):.2f} USD</strong></li>"
+            f"<li>Número total de transacciones: <strong>{int(stats['Num_Transacciones'])}</strong></li>"
+            f"<li>Hora más frecuente de transacción: <strong>{hora_hhmmss}</strong></li>"
+            f"<li>Día más frecuente de transacción: <strong>{dia_semana_frecuente}</strong></li>"
+            f"<li>Mes más frecuente de transacción: <strong>{mes_frecuente}</strong></li>"
             f"<li><strong>Nueva transacción comparada con historial:</strong></li>"
             f"{diferencias_str}"
-            f"<li>Número de transacciones de PAGO TARJETA DE CREDITO: <strong>{
-            int(stats.get('Num_PAGO_TARJETA_CREDITO', 0))}</strong></li>"
-            f"<li>Número de transacciones de REMESAS: <strong>{
-            int(stats.get('Num_REMESAS', 0))}</strong></li>"
-            f"<li>Número de transacciones de TRANSFER BANCOS: <strong>{
-            int(stats.get('Num_TRANSFER_BANCOS', 0))}</strong></li>"
-            f"<li>Número de transacciones de TRANSFER EXTERNAS: <strong>{
-            int(stats.get('Num_TRANSFER_EXTERNAS', 0))}</strong></li>"
-            f"<li>Número de transacciones de TRANSFER INTERNACIONAL: <strong>{
-            int(stats.get('Num_TRANSFER_INTERNACIONAL', 0))}</strong></li>"
-            f"<li>Número de transacciones de TRANSFER INTERNAS: <strong>{
-            int(stats.get('Num_TRANSFER_INTERNAS', 0))}</strong></li>"
+            f"<li>Número de transacciones de PAGO TARJETA DE CREDITO: <strong>{int(stats.get('Num_PAGO_TARJETA_CREDITO', 0))}</strong></li>"
+            f"<li>Número de transacciones de REMESAS: <strong>{int(stats.get('Num_REMESAS', 0))}</strong></li>"
+            f"<li>Número de transacciones de TRANSFER BANCOS: <strong>{int(stats.get('Num_TRANSFER_BANCOS', 0))}</strong></li>"
+            f"<li>Número de transacciones de TRANSFER EXTERNAS: <strong>{int(stats.get('Num_TRANSFER_EXTERNAS', 0))}</strong></li>"
+            f"<li>Número de transacciones de TRANSFER INTERNACIONAL: <strong>{int(stats.get('Num_TRANSFER_INTERNACIONAL', 0))}</strong></li>"
+            f"<li>Número de transacciones de TRANSFER INTERNAS: <strong>{int(stats.get('Num_TRANSFER_INTERNAS', 0))}</strong></li>"
             f"</ul>"
             f"<br><strong>¿Qué significa esta probabilidad?</strong><br>"
-            f"La probabilidad calculada es {
-            probability:.2f}. Este valor representa la confianza que tiene el modelo en que la transacción es normal. "
-            f"Si la probabilidad es menor que {threshold:.2f}, se considera que la transacción es anómala. En este caso, como la probabilidad es {
-            'menor' if outlier else 'mayor'} que el umbral, "
-            f"la transacción ha sido clasificada como {
-            'anómala' if outlier else 'normal'}."
+            f"La probabilidad calculada es {probability:.2f}. "
+            "Este valor representa la confianza que tiene el modelo en que la transacción es normal. "
+            f"Si la probabilidad es menor que {threshold:.2f}, se considera que la transacción es anómala. "
+            f"En este caso, como la probabilidad es {'menor' if outlier else 'mayor'} que el umbral, "
+            f"la transacción ha sido clasificada como {'anómala' if outlier else 'normal'}."
         )
     else:
         # En caso de que no haya estadísticas para el cliente
         explanation = (
-            f"<strong>Cliente {data['Cod_Cliente']}</strong> realizó una transacción de <strong>{
-            float(data['Valor']):.2f} USD</strong>, "
-            f"clasificada como {
-            '<span style=\"color: red;\">Anómala</span>' if outlier else '<span style=\"color: green;\">Normal</span>'}.<br>"
+            f"<strong>Cliente {data['Cod_Cliente']}</strong> "
+            f"realizó una transacción de <strong>{float(data['Valor']):.2f} USD</strong>, "
+            f"clasificada como {'<span style=\"color: red;\">Anómala</span>' if outlier else '<span style=\"color: green;\">Normal</span>'}.<br>"
             f"No se encontraron estadísticas históricas para este cliente."
         )
 
     return jsonify({
-        'message': f"La transacción es {'anómala' if outlier else 'normal'}. Probabilidad: {probability:.2f}. {explanation}",
+        'message': f"La transacción es {'anómala' if outlier else 'normal'}. "
+                   f"Probabilidad: {probability:.2f}. {explanation}",
         'confirm_needed': outlier
     })
 
@@ -209,8 +207,6 @@ def predict():
 # Ruta para manejar la carga de archivos CSV
 @app.route('/cargar_csv', methods=['POST'])
 def cargar_csv():
-    import math
-
     file = request.files['file']  # Obtener el archivo CSV desde la solicitud
     data = pd.read_csv(file)  # Leer el archivo CSV en un DataFrame
 
@@ -224,11 +220,11 @@ def cargar_csv():
 
     # Convertir los códigos de clientes a formato one-hot
     client_labels = data['Cod_Cliente'].astype(int).map(
-        {label: i for i, label in enumerate(data['Cod_Cliente'].unique())}).values
+        {label: i for i, label in enumerate(data['Cod_Cliente'].unique())}
+    ).values
     max_clients = 3685  # Ajustar al número máximo de clientes esperados por el modelo
     client_labels = np.clip(client_labels, 0, max_clients - 1)
-    client_one_hot = tf.keras.utils.to_categorical(
-        client_labels, num_classes=max_clients)
+    client_one_hot = tf.keras.utils.to_categorical(client_labels, num_classes=max_clients)
 
     try:
         # Procesar los datos en lotes para evitar problemas de memoria
@@ -238,8 +234,10 @@ def cargar_csv():
             end = start + batch_size
             batch_data_scaled = data_scaled[start:end]
             batch_client_one_hot = client_one_hot[start:end]
-            batch_probabilities = discriminator([batch_data_scaled.astype(
-                np.float32), batch_client_one_hot.astype(np.float32)], training=False).numpy().flatten()
+            batch_probabilities = discriminator(
+                [batch_data_scaled.astype(np.float32), batch_client_one_hot.astype(np.float32)],
+                training=False
+            ).numpy().flatten()
             probabilities.extend(batch_probabilities)
 
         # Liberar memoria después de procesar cada lote
@@ -270,22 +268,27 @@ def cargar_csv():
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     # Aplicar la conversión de hora a todas las filas
-    data['Hora'] = data.apply(lambda row: convert_to_time(
-        row['Hora_seno'], row['Hora_coseno']), axis=1)
+    data['Hora'] = data.apply(
+        lambda row: convert_to_time(row['Hora_seno'], row['Hora_coseno']),
+        axis=1
+    )
 
     # Calcular información adicional para la respuesta
     num_clientes_unicos = data['Cod_Cliente'].nunique()
-    clientes_con_mas_anomalias = data[data['Outlier'] ==
-                                      True]['Cod_Cliente'].value_counts().head(5).to_dict()
-    clientes_con_mas_normales = data[data['Outlier'] ==
-                                     False]['Cod_Cliente'].value_counts().head(5).to_dict()
+    clientes_con_mas_anomalias = (
+        data[data['Outlier'] == True]['Cod_Cliente'].value_counts().head(5).to_dict()
+    )
+    clientes_con_mas_normales = (
+        data[data['Outlier'] == False]['Cod_Cliente'].value_counts().head(5).to_dict()
+    )
     distribucion_transacciones = data[FEATURES[6:]].sum().to_dict()
 
     total_anomalos = len(data)
     anomalos_clasificadas_anomalas = len(data[data['Outlier'] == True])
     anomalos_clasificadas_normales = len(data[data['Outlier'] == False])
     porcentaje_anomalos = (
-                                  anomalos_clasificadas_anomalas / total_anomalos) * 100
+                                  anomalos_clasificadas_anomalas / total_anomalos
+                          ) * 100
 
     worst_anomalies = data[data['Outlier'] == True].nsmallest(5, 'Probability')
 
@@ -339,19 +342,26 @@ def update_model():
         'Dia_Mes': data['Dia_Mes'],
         'Hora_seno': np.sin(2 * np.pi * seconds / 86400),
         'Hora_coseno': np.cos(2 * np.pi * seconds / 86400),
-        'Transaccion_PAGO TARJETA DE CREDITO': 1 if data['Transaccion'] == 'PAGO TARJETA DE CREDITO' else 0,
-        'Transaccion_REMESAS': 1 if data['Transaccion'] == 'REMESAS' else 0,
-        'Transaccion_TRANSFER BANCOS': 1 if data['Transaccion'] == 'TRANSFER BANCOS' else 0,
-        'Transaccion_TRANSFER EXTERNAS': 1 if data['Transaccion'] == 'TRANSFER EXTERNAS' else 0,
-        'Transaccion_TRANSFER INTERNACIONAL': 1 if data['Transaccion'] == 'TRANSFER INTERNACIONAL' else 0,
-        'Transaccion_TRANSFER INTERNAS': 1 if data['Transaccion'] == 'TRANSFER INTERNAS' else 0
+        'Transaccion_PAGO TARJETA DE CREDITO': (
+            1 if data['Transaccion'] == 'PAGO TARJETA DE CREDITO' else 0),
+        'Transaccion_REMESAS': (
+            1 if data['Transaccion'] == 'REMESAS' else 0),
+        'Transaccion_TRANSFER BANCOS': (
+            1 if data['Transaccion'] == 'TRANSFER BANCOS' else 0),
+        'Transaccion_TRANSFER EXTERNAS': (
+            1 if data['Transaccion'] == 'TRANSFER EXTERNAS' else 0),
+        'Transaccion_TRANSFER INTERNACIONAL': (
+            1 if data['Transaccion'] == 'TRANSFER INTERNACIONAL' else 0),
+        'Transaccion_TRANSFER INTERNAS': (
+            1 if data['Transaccion'] == 'TRANSFER INTERNAS' else 0)
     }
 
     client_id = int(data['Cod_Cliente'])
     # Asegurarse de que el código del cliente no supere el valor máximo permitido
     max_clients = client_stats['Cod_Cliente'].max() + 1
     if client_id >= max_clients:
-        return jsonify({'error': f'El código de cliente {client_id} supera el máximo permitido de {max_clients}.'}), 400
+        return jsonify(
+            {'error': f'El código de cliente {client_id} supera el máximo permitido de {max_clients}.'}), 400
 
     # Verificar si el cliente existe en las estadísticas
     client_stats_row = client_stats[client_stats['Cod_Cliente'] == client_id]
@@ -364,16 +374,14 @@ def update_model():
     num_transacciones = client_stats_row['Num_Transacciones'] + 1
     media_valor_actualizada = (
                                       (client_stats_row['Media_Valor'] * client_stats_row['Num_Transacciones']) + data_preprocessed['Valor']) / num_transacciones
-    varianza_actualizada = ((client_stats_row['Std_Valor'] ** 2) * client_stats_row['Num_Transacciones'] +
-                            (data_preprocessed['Valor'] - media_valor_actualizada) ** 2) / num_transacciones
+    varianza_actualizada = (
+            ((client_stats_row['Std_Valor'] ** 2) * client_stats_row['Num_Transacciones'] +
+             (data_preprocessed['Valor'] - media_valor_actualizada) ** 2) / num_transacciones)
     std_valor_actualizada = np.sqrt(varianza_actualizada)
 
-    client_stats.loc[client_stats['Cod_Cliente'] ==
-                     client_id, 'Num_Transacciones'] = num_transacciones
-    client_stats.loc[client_stats['Cod_Cliente'] ==
-                     client_id, 'Media_Valor'] = media_valor_actualizada
-    client_stats.loc[client_stats['Cod_Cliente'] ==
-                     client_id, 'Std_Valor'] = std_valor_actualizada
+    client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Num_Transacciones'] = num_transacciones
+    client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Media_Valor'] = media_valor_actualizada
+    client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Std_Valor'] = std_valor_actualizada
     client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Max_Valor'] = max(
         client_stats_row['Max_Valor'], data_preprocessed['Valor'])
 
@@ -384,13 +392,14 @@ def update_model():
     data_df = pd.DataFrame([data_preprocessed])
     data_scaled = scaler_gan.transform(data_df)
     client_labels = np.array([client_id])
-    client_one_hot = tf.keras.utils.to_categorical(
-        client_labels, num_classes=max_clients)
+    client_one_hot = tf.keras.utils.to_categorical(client_labels, num_classes=max_clients)
 
     # Reentrenamiento del discriminador
     try:
-        discriminator.train_on_batch([data_scaled.astype(
-            np.float32), client_one_hot.astype(np.float32)], np.array([1.0]))
+        discriminator.train_on_batch(
+            [data_scaled.astype(np.float32), client_one_hot.astype(np.float32)],
+            np.array([1.0])
+        )
     except Exception as e:
         return jsonify({'error': f'Error durante el reentrenamiento: {str(e)}'}), 500
 
