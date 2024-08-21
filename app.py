@@ -98,7 +98,8 @@ def predict():
     if not stats.empty:
         stats = stats.iloc[0]
         hora_frecuente = int(stats['Hora_Mas_Frecuente'])
-        hora_hhmmss = f"{hora_frecuente // 3600:02d}:{(hora_frecuente % 3600) // 60:02d}:{hora_frecuente % 60:02d}"
+        hora_hhmmss = f"{hora_frecuente // 3600:02d}:{
+        (hora_frecuente % 3600) // 60:02d}:{hora_frecuente % 60:02d}"
 
         # Convertir el día y mes más frecuentes a su representación en letras
         dia_semana_map = ['Domingo', 'Lunes', 'Martes',
@@ -131,7 +132,8 @@ def predict():
             diferencias.append(
                 "La hora de esta transacción es inusual comparada con las horas frecuentes anteriores.")
         if tipo_transaccion_nuevo:
-            diferencias.append(f"Este tipo de transacción ({data['Transaccion']}) no es común para este cliente.")
+            diferencias.append(f"Este tipo de transacción ({
+            data['Transaccion']}) no es común para este cliente.")
         if dia_inusual:
             diferencias.append(f"Esta transacción se realiza en un día ({dia_semana_map[int(
                 data['Dia_Semana'])]}) que no es el más frecuente para este cliente.")
@@ -366,9 +368,12 @@ def update_model():
                             (data_preprocessed['Valor'] - media_valor_actualizada) ** 2) / num_transacciones
     std_valor_actualizada = np.sqrt(varianza_actualizada)
 
-    client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Num_Transacciones'] = num_transacciones
-    client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Media_Valor'] = media_valor_actualizada
-    client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Std_Valor'] = std_valor_actualizada
+    client_stats.loc[client_stats['Cod_Cliente'] ==
+                     client_id, 'Num_Transacciones'] = num_transacciones
+    client_stats.loc[client_stats['Cod_Cliente'] ==
+                     client_id, 'Media_Valor'] = media_valor_actualizada
+    client_stats.loc[client_stats['Cod_Cliente'] ==
+                     client_id, 'Std_Valor'] = std_valor_actualizada
     client_stats.loc[client_stats['Cod_Cliente'] == client_id, 'Max_Valor'] = max(
         client_stats_row['Max_Valor'], data_preprocessed['Valor'])
 
@@ -384,7 +389,8 @@ def update_model():
 
     # Reentrenamiento del discriminador
     try:
-        discriminator.train_on_batch([data_scaled.astype(np.float32), client_one_hot.astype(np.float32)], np.array([1.0]))
+        discriminator.train_on_batch([data_scaled.astype(
+            np.float32), client_one_hot.astype(np.float32)], np.array([1.0]))
     except Exception as e:
         return jsonify({'error': f'Error durante el reentrenamiento: {str(e)}'}), 500
 
