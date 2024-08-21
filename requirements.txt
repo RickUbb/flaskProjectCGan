@@ -3,6 +3,9 @@ pandas==2.1.4
 numpy==1.26.4
 tensorflow==2.17.0
 scikit-learn==1.3.2
-werkzeug==2.2.3
+Werkzeug==2.2.3
 Jinja2==3.1.2
 protobuf==3.20.3
+h5py==3.11.0  # Necesario si usas modelos guardados en formato H5
+
+#pip install -r requirements.txt
