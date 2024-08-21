@@ -162,7 +162,7 @@ def predict():
         explanation = (
             f"<strong>Cliente {data['Cod_Cliente']}</strong> "
             f"realizó una transacción de <strong>{float(data['Valor']):.2f} USD</strong>, "
-            f"clasificada como {'<span style=\"color: red;\">Anómala</span>' if outlier else '<span style=\"color: green;\">Normal</span>'}.<br>"
+            f'clasificada como {"<span style=\"color: red;\">Anómala</span>" if outlier else "<span style=\"color: green;\">Normal</span>"}.<br>'
             f"<ul>"
             f"<li>Valor máximo de transacción previo: <strong>{float(stats['Max_Valor']):.2f} USD</strong></li>"
             f"<li>Valor mediano de transacción: <strong>{float(stats['Mediana_Valor']):.2f} USD</strong></li>"
